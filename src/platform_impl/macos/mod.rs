@@ -4,7 +4,7 @@ use objc2_app_kit::{NSEvent, NSEventModifierFlags};
 use std::{
     collections::{BTreeMap, HashSet},
     ffi::c_void,
-    ptr,
+    // ptr,
     sync::{Arc, Mutex},
 };
 
@@ -144,6 +144,7 @@ impl GlobalHotKeyManager {
                     return Err(crate::Error::AlreadyRegistered(hotkey));
                 }
             }
+
             self.start_watching_modifier_keys()
         } else {
             Err(crate::Error::FailedToRegister(format!(
@@ -155,10 +156,10 @@ impl GlobalHotKeyManager {
 
     pub fn unregister(&self, hotkey: HotKey) -> crate::Result<()> {
         if is_modifier_key(hotkey.key) {
-            let mut media_hotkey = self.modifier_hotkeys.lock().unwrap();
-            media_hotkey.remove(&hotkey);
-            if media_hotkey.is_empty() {
-                self.stop_watching_media_keys();
+            let mut modifier_hotkey = self.modifier_hotkeys.lock().unwrap();
+            modifier_hotkey.remove(&hotkey);
+            if modifier_hotkey.is_empty() {
+                self.stop_watching_modifier_keys();
             }
         } else if let Some(hotkeywrapper) = self.hotkeys.lock().unwrap().remove(&hotkey.id()) {
             unsafe { self.unregister_hotkey_ptr(hotkeywrapper.ptr, hotkey) }?;
@@ -214,7 +215,9 @@ impl GlobalHotKeyManager {
                 Arc::into_raw(self.modifier_hotkeys.clone()) as *const c_void,
             );
             if tap.is_null() {
-                return Err(crate::Error::FailedToWatchMediaKeyEvent);
+                return Err(crate::Error::FailedToWatchModifierKeyEvent(
+                    "Failed to create tap".into(),
+                ));
             }
             *event_tap = Some(tap);
 
@@ -225,7 +228,9 @@ impl GlobalHotKeyManager {
                 CFRelease(tap as *const c_void);
                 *event_tap = None;
 
-                return Err(crate::Error::FailedToWatchMediaKeyEvent);
+                return Err(crate::Error::FailedToWatchModifierKeyEvent(
+                    "Failed to create loop source".into(),
+                ));
             }
             *event_tap_source = Some(loop_source);
 
@@ -237,7 +242,7 @@ impl GlobalHotKeyManager {
         }
     }
 
-    fn stop_watching_media_keys(&self) {
+    fn stop_watching_modifier_keys(&self) {
         unsafe {
             if let Some(event_tap_source) = self.event_tap_source.lock().unwrap().take() {
                 let run_loop = CFRunLoopGetMain();
@@ -318,7 +323,7 @@ impl Drop for GlobalHotKeyManager {
         unsafe {
             RemoveEventHandler(self.event_handler_ptr);
         }
-        self.stop_watching_media_keys()
+        self.stop_watching_modifier_keys()
     }
 }
 
